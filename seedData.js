@@ -61,6 +61,7 @@ function seedDatabase() {
     },
     {
       officer_id: officerMap['IC-105'],
+      type: 'LEAVE',
       leave_start: '2026-10-26', // Starts on Monday
       leave_end: '2026-10-30',
       prefix_start: '2026-10-24',
@@ -69,15 +70,27 @@ function seedDatabase() {
       suffix_end: null,
       return_date: '2026-11-02',
       remarks: 'Leave starting on Monday Oct 26 (Restricts Sunday Oct 25 per Rule 5.3)'
+    },
+    {
+      officer_id: officerMap['IC-108'],
+      type: 'TY_DUTY',
+      leave_start: '2026-10-21',
+      leave_end: '2026-10-23',
+      prefix_start: null,
+      prefix_end: null,
+      suffix_start: null,
+      suffix_end: null,
+      return_date: '2026-10-24',
+      remarks: 'Temporary Duty (Ty Duty) at HQ'
     }
   ];
 
   const insertLeave = db.prepare(`
-    INSERT INTO leaves (officer_id, leave_start, leave_end, prefix_start, prefix_end, suffix_start, suffix_end, return_date, remarks)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO leaves (officer_id, type, leave_start, leave_end, prefix_start, prefix_end, suffix_start, suffix_end, return_date, remarks)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const l of leaves) {
-    insertLeave.run(l.officer_id, l.leave_start, l.leave_end, l.prefix_start, l.prefix_end, l.suffix_start, l.suffix_end, l.return_date, l.remarks);
+    insertLeave.run(l.officer_id, l.type || 'LEAVE', l.leave_start, l.leave_end, l.prefix_start, l.prefix_end, l.suffix_start, l.suffix_end, l.return_date, l.remarks);
   }
 
   // 4. Insert Previous Week Finalized Roster (Week: Oct 05 to Oct 11, 2026)

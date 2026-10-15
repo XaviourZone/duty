@@ -281,6 +281,53 @@ test('Excel template generation and export functionality works properly', () => 
   assert(exportBuffer.length > 500, 'Export buffer must not be empty');
 });
 
+// Test 17: Temporary Duty (Ty Duty) exclusion
+test('Officer on Temporary Duty (Ty Duty) is strictly excluded during the TDY period', () => {
+  // Insert test officer
+  const oInfo = db.prepare(`
+    INSERT INTO officers (service_id, name, rank, status, joining_date, normal_duty_count, sunday_duty_count)
+    VALUES ('IC-TEST-TDY', 'Test TyDuty Officer', 'Lt', 'ACTIVE', '2026-01-01', 5, 2)
+  `).run();
+  const testOfficerId = oInfo.lastInsertRowid;
+
+  // Insert Ty Duty record
+  db.prepare(`
+    INSERT INTO leaves (officer_id, type, leave_start, leave_end, return_date, remarks)
+    VALUES (?, 'TY_DUTY', '2026-11-10', '2026-11-15', '2026-11-16', 'Command Training Course')
+  `).run(testOfficerId);
+
+  // During Ty Duty: 2026-11-12
+  const duringTDY = checkOfficerEligibility(testOfficerId, '2026-11-12', false);
+  assert(!duringTDY.valid, 'Officer must be ineligible during Temporary Duty (Ty Duty)');
+  assert(duringTDY.errors.some(e => e.includes('TEMPORARY DUTY')), 'Error message must specify TEMPORARY DUTY');
+
+  // After Ty Duty: 2026-11-18
+  const afterTDY = checkOfficerEligibility(testOfficerId, '2026-11-18', false);
+  assert(afterTDY.valid, 'Officer should be eligible after Ty Duty concludes');
+
+  // Cleanup
+  db.prepare('DELETE FROM leaves WHERE officer_id = ?').run(testOfficerId);
+  db.prepare('DELETE FROM officers WHERE id = ?').run(testOfficerId);
+});
+
+// Test 18: Transferred officer permanent deletion
+test('A transferred-out officer entry can be deleted from the database', () => {
+  const oInfo = db.prepare(`
+    INSERT INTO officers (service_id, name, rank, status, joining_date, transfer_date, normal_duty_count, sunday_duty_count)
+    VALUES ('IC-TEST-DEL', 'Test Transfer Delete', 'Lt', 'TRANSFERRED_OUT', '2025-01-01', '2026-09-01', 10, 5)
+  `).run();
+  const testOfficerId = oInfo.lastInsertRowid;
+
+  const foundBefore = db.prepare('SELECT id FROM officers WHERE id = ?').get(testOfficerId);
+  assert(foundBefore, 'Officer must exist before deletion');
+
+  // Delete officer
+  db.prepare('DELETE FROM officers WHERE id = ?').run(testOfficerId);
+
+  const foundAfter = db.prepare('SELECT id FROM officers WHERE id = ?').get(testOfficerId);
+  assert(!foundAfter, 'Officer must be successfully deleted from pool');
+});
+
 console.log('\n====================================================');
 console.log(`TEST SUITE RESULTS: ${passedTests} / ${totalTests} SCENARIOS PASSED`);
 console.log('====================================================');

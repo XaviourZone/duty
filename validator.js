@@ -50,26 +50,30 @@ function checkOfficerEligibility(officerId, targetDate, isPunishment = false, cu
     errors.push(`Officer ${officer.name} is transferred out as of ${officer.transfer_date} (Unavailable on ${targetDate}).`);
   }
 
-  // 3. Check Leaves, Prefix, Suffix
+  // 3. Check Leaves, Ty Duty, Prefix, Suffix
   const leaves = db.prepare('SELECT * FROM leaves WHERE officer_id = ?').all(officerId);
   for (const leave of leaves) {
+    const isTyDuty = leave.type === 'TY_DUTY';
+    const typeLabel = isTyDuty ? 'TEMPORARY DUTY (Ty Duty)' : 'LEAVE';
     if (isDateInRange(targetDate, leave.leave_start, leave.leave_end)) {
-      errors.push(`Officer ${officer.name} is on LEAVE from ${leave.leave_start} to ${leave.leave_end}.`);
+      errors.push(`Officer ${officer.name} is on ${typeLabel} from ${leave.leave_start} to ${leave.leave_end}.`);
     }
-    if (leave.prefix_start && leave.prefix_end && isDateInRange(targetDate, leave.prefix_start, leave.prefix_end)) {
-      errors.push(`Officer ${officer.name} is unavailable during PREFIX holidays (${leave.prefix_start} to ${leave.prefix_end}).`);
-    }
-    if (leave.suffix_start && leave.suffix_end && isDateInRange(targetDate, leave.suffix_start, leave.suffix_end)) {
-      errors.push(`Officer ${officer.name} is unavailable during SUFFIX holidays (${leave.suffix_start} to ${leave.suffix_end}).`);
-    }
+    if (!isTyDuty) {
+      if (leave.prefix_start && leave.prefix_end && isDateInRange(targetDate, leave.prefix_start, leave.prefix_end)) {
+        errors.push(`Officer ${officer.name} is unavailable during PREFIX holidays (${leave.prefix_start} to ${leave.prefix_end}).`);
+      }
+      if (leave.suffix_start && leave.suffix_end && isDateInRange(targetDate, leave.suffix_start, leave.suffix_end)) {
+        errors.push(`Officer ${officer.name} is unavailable during SUFFIX holidays (${leave.suffix_start} to ${leave.suffix_end}).`);
+      }
 
-    // Section 5 Rule 3: Leave beginning on Monday -> officer must not be assigned on the preceding Sunday!
-    const leaveStartDate = new Date(leave.leave_start + 'T00:00:00Z');
-    const dayOfWeek = leaveStartDate.getUTCDay(); // 1 = Monday
-    if (dayOfWeek === 1) {
-      const precedingSunday = addDays(leave.leave_start, -1);
-      if (targetDate === precedingSunday) {
-        errors.push(`Officer ${officer.name} begins leave on Monday (${leave.leave_start}) and cannot be assigned on the preceding Sunday (${precedingSunday}).`);
+      // Section 5 Rule 3: Leave beginning on Monday -> officer must not be assigned on the preceding Sunday!
+      const leaveStartDate = new Date(leave.leave_start + 'T00:00:00Z');
+      const dayOfWeek = leaveStartDate.getUTCDay(); // 1 = Monday
+      if (dayOfWeek === 1) {
+        const precedingSunday = addDays(leave.leave_start, -1);
+        if (targetDate === precedingSunday) {
+          errors.push(`Officer ${officer.name} begins leave on Monday (${leave.leave_start}) and cannot be assigned on the preceding Sunday (${precedingSunday}).`);
+        }
       }
     }
   }

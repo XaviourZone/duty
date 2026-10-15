@@ -44,6 +44,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS leaves (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     officer_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'LEAVE',    -- 'LEAVE', 'TY_DUTY'
     leave_start TEXT NOT NULL,             -- YYYY-MM-DD
     leave_end TEXT NOT NULL,               -- YYYY-MM-DD
     prefix_start TEXT,                     -- YYYY-MM-DD
@@ -109,6 +110,13 @@ const adminPassRow = db.prepare('SELECT value FROM settings WHERE key = ?').get(
 if (!adminPassRow) {
   const hash = bcrypt.hashSync('admin@123', 10);
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('admin_password', hash);
+}
+
+// Migration: Ensure type column exists on leaves table
+try {
+  db.exec("ALTER TABLE leaves ADD COLUMN type TEXT NOT NULL DEFAULT 'LEAVE'");
+} catch (e) {
+  // column already exists
 }
 
 module.exports = db;

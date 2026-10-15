@@ -26,7 +26,6 @@
         <div class="naval-crest">⚓</div>
         <div class="logo-text">
           <h1>Automated Duty Roster Management</h1>
-          <p>Naval Station Officer Allocation System</p>
         </div>
       </div>
       <div class="header-actions">
@@ -144,7 +143,7 @@
       <div class="tabs-nav">
         <button class="tab-btn active" data-tab="tab-roster-ops">Roster Operations</button>
         <button class="tab-btn" data-tab="tab-officers">Officer Pool &amp; Counts</button>
-        <button class="tab-btn" data-tab="tab-leaves">Leave Management</button>
+        <button class="tab-btn" data-tab="tab-leaves">Leave &amp; Ty Duty</button>
         <button class="tab-btn" data-tab="tab-holidays">Declared Holidays</button>
         <button class="tab-btn" data-tab="tab-excel">Excel Import &amp; Export</button>
         <button class="tab-btn" data-tab="tab-history">Duty History &amp; Swaps</button>
@@ -205,17 +204,17 @@
         </div>
       </div>
 
-      <!-- Tab 3: Leave Management -->
+      <!-- Tab 3: Leave & Ty Duty Management -->
       <div id="tab-leaves" class="tab-content">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
           <div>
-            <h3 style="font-size: 1rem; color: #fff;">Leave, Prefix &amp; Suffix Records</h3>
+            <h3 style="font-size: 1rem; color: var(--text-primary);">Leave &amp; Temporary Duty (Ty Duty) Records</h3>
             <p style="font-size: 0.8rem; color: var(--text-secondary);">
-              Officers are excluded during leave, prefix, and suffix dates. Returning officers receive priority on their return date when eligible.
+              Officers are excluded during leave, Ty Duty, prefix, and suffix dates. Returning officers receive priority on their return date when eligible.
             </p>
           </div>
           <button id="btnOpenAddLeave" class="btn btn-primary btn-sm">
-            + Record Officer Leave
+            + Record Leave / Ty Duty
           </button>
         </div>
 
@@ -223,12 +222,13 @@
           <table class="roster-table" id="leavesTable">
             <thead>
               <tr>
+                <th>Type</th>
                 <th>Officer</th>
-                <th>Leave Period</th>
+                <th>Absence Period</th>
                 <th>Prefix Holidays</th>
                 <th>Suffix Holidays</th>
                 <th>Return to Duty Date</th>
-                <th>Remarks</th>
+                <th>Remarks / Destination</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -612,64 +612,75 @@
     </div>
   </div>
 
-  <!-- 6. Add Leave Modal -->
+  <!-- 6. Add Leave / Ty Duty Modal -->
   <div class="modal-overlay" id="modalAddLeave">
     <div class="modal-dialog" style="max-width: 600px;">
       <div class="modal-header">
-        <h3>Record Leave, Prefix &amp; Suffix Details</h3>
+        <h3 id="modalLeaveTitle">Record Leave or Temporary Duty (Ty Duty)</h3>
         <button class="modal-close" data-close="modalAddLeave">&times;</button>
       </div>
       <form id="formAddLeave">
         <div class="modal-body">
-          <div class="form-group" style="margin-bottom: 1rem;">
-            <label for="leaveOfficerSelect">Officer</label>
-            <select id="leaveOfficerSelect" class="form-control" required></select>
+          <div class="form-grid" style="margin-bottom: 1rem;">
+            <div class="form-group">
+              <label for="leaveTypeSelect">Record Type</label>
+              <select id="leaveTypeSelect" class="form-control">
+                <option value="LEAVE" selected>Leave (Annual / Casual)</option>
+                <option value="TY_DUTY">Temporary Duty (Ty Duty / TDY)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="leaveOfficerSelect">Officer</label>
+              <select id="leaveOfficerSelect" class="form-control" required></select>
+            </div>
           </div>
 
           <div class="form-grid">
             <div class="form-group">
-              <label for="leaveStart">Leave Start Date</label>
+              <label for="leaveStart" id="lblLeaveStart">Start / Departure Date</label>
               <input type="date" id="leaveStart" class="form-control" required>
             </div>
             <div class="form-group">
-              <label for="leaveEnd">Leave End Date</label>
+              <label for="leaveEnd" id="lblLeaveEnd">End / Completion Date</label>
               <input type="date" id="leaveEnd" class="form-control" required>
             </div>
           </div>
 
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="prefixStart">Prefix Holidays Start (Optional)</label>
-              <input type="date" id="prefixStart" class="form-control">
+          <div id="prefixSuffixContainer">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="prefixStart">Prefix Holidays Start (Optional)</label>
+                <input type="date" id="prefixStart" class="form-control">
+              </div>
+              <div class="form-group">
+                <label for="prefixEnd">Prefix Holidays End (Optional)</label>
+                <input type="date" id="prefixEnd" class="form-control">
+              </div>
             </div>
-            <div class="form-group">
-              <label for="prefixEnd">Prefix Holidays End (Optional)</label>
-              <input type="date" id="prefixEnd" class="form-control">
-            </div>
-          </div>
 
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="suffixStart">Suffix Holidays Start (Optional)</label>
-              <input type="date" id="suffixStart" class="form-control">
-            </div>
-            <div class="form-group">
-              <label for="suffixEnd">Suffix Holidays End (Optional)</label>
-              <input type="date" id="suffixEnd" class="form-control">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="suffixStart">Suffix Holidays Start (Optional)</label>
+                <input type="date" id="suffixStart" class="form-control">
+              </div>
+              <div class="form-group">
+                <label for="suffixEnd">Suffix Holidays End (Optional)</label>
+                <input type="date" id="suffixEnd" class="form-control">
+              </div>
             </div>
           </div>
 
           <div class="form-group" style="margin-bottom: 1rem;">
             <label for="leaveReturnDate">Actual Return-to-Duty Date</label>
             <input type="date" id="leaveReturnDate" class="form-control" required>
-            <p style="font-size: 0.75rem; color: var(--cyan-accent); margin-top: 0.25rem;">
+            <p style="font-size: 0.75rem; color: var(--primary-color); margin-top: 0.25rem;">
               Officer is prioritized for duty on this return date when feasible and rest restrictions permit.
             </p>
           </div>
 
           <div class="form-group">
-            <label for="leaveRemarks">Remarks</label>
-            <input type="text" id="leaveRemarks" class="form-control" placeholder="e.g. Annual leave with weekend suffix">
+            <label for="leaveRemarks" id="lblLeaveRemarks">Remarks / Destination</label>
+            <input type="text" id="leaveRemarks" class="form-control" placeholder="e.g. Annual leave or Ty Duty location / course">
           </div>
         </div>
         <div class="modal-footer">

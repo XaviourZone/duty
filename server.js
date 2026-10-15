@@ -289,6 +289,21 @@ app.post('/api/officers/:id/transfer-out', requireWatchkeeper, (req, res) => {
   }
 });
 
+// Delete Transferred Officer permanently
+app.delete('/api/officers/:id', requireWatchkeeper, (req, res) => {
+  try {
+    const officerId = req.params.id;
+    const officer = db.prepare('SELECT * FROM officers WHERE id = ?').get(officerId);
+    if (!officer) {
+      return res.status(404).json({ error: 'Officer not found.' });
+    }
+    db.prepare('DELETE FROM officers WHERE id = ?').run(officerId);
+    res.json({ success: true, message: `Officer ${officer.name} deleted successfully.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Leaves Management ---
 app.get('/api/leaves', requireWatchkeeper, (req, res) => {
   try {
@@ -304,34 +319,36 @@ app.get('/api/leaves', requireWatchkeeper, (req, res) => {
   }
 });
 
-// Add Leave
+// Add Leave / Ty Duty
 app.post('/api/leaves', requireWatchkeeper, (req, res) => {
   try {
-    const { officer_id, leave_start, leave_end, prefix_start, prefix_end, suffix_start, suffix_end, return_date, remarks } = req.body;
+    const { officer_id, type, leave_start, leave_end, prefix_start, prefix_end, suffix_start, suffix_end, return_date, remarks } = req.body;
     if (!officer_id || !leave_start || !leave_end || !return_date) {
-      return res.status(400).json({ error: 'Officer, Leave Start, Leave End, and Return Date are required.' });
+      return res.status(400).json({ error: 'Officer, Start Date, End Date, and Return Date are required.' });
     }
 
     if (leave_end < leave_start) {
-      return res.status(400).json({ error: 'Leave End Date cannot be before Leave Start Date.' });
+      return res.status(400).json({ error: 'End Date cannot be before Start Date.' });
     }
 
+    const recordType = type === 'TY_DUTY' ? 'TY_DUTY' : 'LEAVE';
     db.prepare(`
-      INSERT INTO leaves (officer_id, leave_start, leave_end, prefix_start, prefix_end, suffix_start, suffix_end, return_date, remarks)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO leaves (officer_id, type, leave_start, leave_end, prefix_start, prefix_end, suffix_start, suffix_end, return_date, remarks)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       officer_id,
+      recordType,
       leave_start,
       leave_end,
-      prefix_start || null,
-      prefix_end || null,
-      suffix_start || null,
-      suffix_end || null,
+      recordType === 'TY_DUTY' ? null : (prefix_start || null),
+      recordType === 'TY_DUTY' ? null : (prefix_end || null),
+      recordType === 'TY_DUTY' ? null : (suffix_start || null),
+      recordType === 'TY_DUTY' ? null : (suffix_end || null),
       return_date,
       remarks || null
     );
 
-    res.json({ success: true, message: 'Leave recorded successfully.' });
+    res.json({ success: true, message: `${recordType === 'TY_DUTY' ? 'Temporary Duty' : 'Leave'} recorded successfully.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

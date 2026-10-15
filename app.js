@@ -44,6 +44,7 @@
     leaves: [
       {
         id: 1,
+        type: 'LEAVE',
         officer_id: 4, // IC-104
         leave_start: '2026-10-12',
         leave_end: '2026-10-16',
@@ -56,6 +57,7 @@
       },
       {
         id: 2,
+        type: 'LEAVE',
         officer_id: 5, // IC-105
         leave_start: '2026-10-26', // Starts on Monday -> Sunday Oct 25 blocked per Rule 5.3
         leave_end: '2026-10-30',
@@ -65,6 +67,19 @@
         suffix_end: null,
         return_date: '2026-11-02',
         remarks: 'Leave starting Monday Oct 26 (Preceding Sunday Oct 25 restricted)'
+      },
+      {
+        id: 3,
+        type: 'TY_DUTY',
+        officer_id: 8, // IC-108
+        leave_start: '2026-10-21',
+        leave_end: '2026-10-23',
+        prefix_start: null,
+        prefix_end: null,
+        suffix_start: null,
+        suffix_end: null,
+        return_date: '2026-10-24',
+        remarks: 'Temporary Duty (Ty Duty) at Command HQ'
       }
     ],
     roster_weeks: [
@@ -198,25 +213,29 @@
       errors.push(`Officer ${officer.name} is transferred out as of ${officer.transfer_date} (Unavailable on ${targetDate}).`);
     }
 
-    // 3. Leaves, Prefix, Suffix
+    // 3. Leaves, Ty Duty, Prefix, Suffix
     const officerLeaves = db.leaves.filter(l => l.officer_id === officer.id);
     for (const leave of officerLeaves) {
+      const isTyDuty = leave.type === 'TY_DUTY';
+      const typeLabel = isTyDuty ? 'TEMPORARY DUTY (Ty Duty)' : 'LEAVE';
       if (isDateInRange(targetDate, leave.leave_start, leave.leave_end)) {
-        errors.push(`Officer ${officer.name} is on LEAVE from ${leave.leave_start} to ${leave.leave_end}.`);
+        errors.push(`Officer ${officer.name} is on ${typeLabel} from ${leave.leave_start} to ${leave.leave_end}.`);
       }
-      if (leave.prefix_start && leave.prefix_end && isDateInRange(targetDate, leave.prefix_start, leave.prefix_end)) {
-        errors.push(`Officer ${officer.name} is unavailable during PREFIX holidays (${leave.prefix_start} to ${leave.prefix_end}).`);
-      }
-      if (leave.suffix_start && leave.suffix_end && isDateInRange(targetDate, leave.suffix_start, leave.suffix_end)) {
-        errors.push(`Officer ${officer.name} is unavailable during SUFFIX holidays (${leave.suffix_start} to ${leave.suffix_end}).`);
-      }
+      if (!isTyDuty) {
+        if (leave.prefix_start && leave.prefix_end && isDateInRange(targetDate, leave.prefix_start, leave.prefix_end)) {
+          errors.push(`Officer ${officer.name} is unavailable during PREFIX holidays (${leave.prefix_start} to ${leave.prefix_end}).`);
+        }
+        if (leave.suffix_start && leave.suffix_end && isDateInRange(targetDate, leave.suffix_start, leave.suffix_end)) {
+          errors.push(`Officer ${officer.name} is unavailable during SUFFIX holidays (${leave.suffix_start} to ${leave.suffix_end}).`);
+        }
 
-      // Monday Leave rule (Rule 5.3): Preceding Sunday blocked
-      const leaveStartDate = new Date(leave.leave_start + 'T00:00:00Z');
-      if (leaveStartDate.getUTCDay() === 1) { // 1 = Monday
-        const precedingSunday = addDays(leave.leave_start, -1);
-        if (targetDate === precedingSunday) {
-          errors.push(`Officer ${officer.name} begins leave on Monday (${leave.leave_start}) and cannot be assigned on the preceding Sunday (${precedingSunday}).`);
+        // Monday Leave rule (Rule 5.3): Preceding Sunday blocked
+        const leaveStartDate = new Date(leave.leave_start + 'T00:00:00Z');
+        if (leaveStartDate.getUTCDay() === 1) { // 1 = Monday
+          const precedingSunday = addDays(leave.leave_start, -1);
+          if (targetDate === precedingSunday) {
+            errors.push(`Officer ${officer.name} begins leave on Monday (${leave.leave_start}) and cannot be assigned on the preceding Sunday (${precedingSunday}).`);
+          }
         }
       }
     }
@@ -1437,7 +1456,12 @@
         if (!isTransferred) {
           actionHtml = `<button class="btn btn-secondary btn-sm btn-transfer-out" data-id="${o.id}">Transfer Out</button>`;
         } else {
-          actionHtml = `<span style="font-size: 0.75rem; color: var(--text-muted);">Transferred</span>`;
+          actionHtml = `
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Transferred</span>
+              <button class="btn btn-danger btn-sm btn-delete-officer" data-id="${o.id}" title="Permanently delete this transferred officer">Delete</button>
+            </div>
+          `;
         }
 
         tr.innerHTML = `
@@ -1463,6 +1487,23 @@
           transferOfficerName.textContent = `${officer.rank} ${officer.name}`;
           transferDateInput.value = new Date().toISOString().split('T')[0];
           openModal(modalTransferOut);
+        });
+      });
+
+      document.querySelectorAll('.btn-delete-officer').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const oId = parseInt(btn.getAttribute('data-id'), 10);
+          const officer = db.officers.find(o => o.id === oId);
+          if (!officer) return;
+          if (!confirm(`Are you sure you want to permanently delete officer ${officer.rank} ${officer.name} (${officer.service_id}) from the database? This cannot be undone.`)) {
+            return;
+          }
+          db.officers = db.officers.filter(o => o.id !== oId);
+          db.leaves = db.leaves.filter(l => l.officer_id !== oId);
+          StorageEngine.save(db);
+          showToast(`Officer ${officer.rank} ${officer.name} deleted successfully.`, 'info');
+          renderOfficersTable();
+          renderRosterView();
         });
       });
     }
@@ -1524,23 +1565,28 @@
       renderRosterView();
     });
 
-    // Leaves Tab Management
+    // Leaves & Ty Duty Tab Management
     function renderLeavesTable() {
       const tbody = document.getElementById('leavesTableBody');
       tbody.innerHTML = '';
 
       if (db.leaves.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No leave records found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No leave or Ty Duty records found.</td></tr>`;
         return;
       }
 
       db.leaves.forEach(l => {
         const officer = db.officers.find(o => o.id === l.officer_id);
-        const prefix = (l.prefix_start && l.prefix_end) ? `${l.prefix_start} to ${l.prefix_end}` : 'None';
-        const suffix = (l.suffix_start && l.suffix_end) ? `${l.suffix_start} to ${l.suffix_end}` : 'None';
+        const isTyDuty = l.type === 'TY_DUTY';
+        const typeBadge = isTyDuty
+          ? `<span class="badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);">TY DUTY</span>`
+          : `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">LEAVE</span>`;
+        const prefix = (!isTyDuty && l.prefix_start && l.prefix_end) ? `${l.prefix_start} to ${l.prefix_end}` : '<span style="color: var(--text-muted);">-</span>';
+        const suffix = (!isTyDuty && l.suffix_start && l.suffix_end) ? `${l.suffix_start} to ${l.suffix_end}` : '<span style="color: var(--text-muted);">-</span>';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
+          <td>${typeBadge}</td>
           <td><strong>${officer ? `${escapeHtml(officer.rank)} ${escapeHtml(officer.name)}` : 'Unknown'}</strong></td>
           <td>${l.leave_start} to ${l.leave_end}</td>
           <td>${prefix}</td>
@@ -1554,15 +1600,48 @@
 
       document.querySelectorAll('.btn-delete-leave').forEach(btn => {
         btn.addEventListener('click', () => {
-          if (!confirm('Delete this leave record?')) return;
           const lId = parseInt(btn.getAttribute('data-id'), 10);
+          const rec = db.leaves.find(l => l.id === lId);
+          const typeName = (rec && rec.type === 'TY_DUTY') ? 'Temporary Duty (Ty Duty)' : 'leave';
+          if (!confirm(`Delete this ${typeName} record?`)) return;
           db.leaves = db.leaves.filter(l => l.id !== lId);
           StorageEngine.save(db);
-          showToast('Leave record removed.', 'info');
+          showToast(`${typeName} record removed.`, 'info');
           renderLeavesTable();
           renderRosterView();
         });
       });
+    }
+
+    const leaveTypeSelect = document.getElementById('leaveTypeSelect');
+    const prefixSuffixContainer = document.getElementById('prefixSuffixContainer');
+    const lblLeaveStart = document.getElementById('lblLeaveStart');
+    const lblLeaveEnd = document.getElementById('lblLeaveEnd');
+    const modalLeaveTitle = document.getElementById('modalLeaveTitle');
+    const leaveRemarks = document.getElementById('leaveRemarks');
+
+    function syncLeaveTypeUI() {
+      if (!leaveTypeSelect) return;
+      const isTyDuty = leaveTypeSelect.value === 'TY_DUTY';
+      if (prefixSuffixContainer) {
+        prefixSuffixContainer.style.display = isTyDuty ? 'none' : 'block';
+      }
+      if (lblLeaveStart) {
+        lblLeaveStart.textContent = isTyDuty ? 'TDY Departure Date' : 'Leave Start Date';
+      }
+      if (lblLeaveEnd) {
+        lblLeaveEnd.textContent = isTyDuty ? 'TDY Completion Date' : 'Leave End Date';
+      }
+      if (modalLeaveTitle) {
+        modalLeaveTitle.textContent = isTyDuty ? 'Record Temporary Duty (Ty Duty)' : 'Record Officer Leave';
+      }
+      if (leaveRemarks) {
+        leaveRemarks.placeholder = isTyDuty ? 'Destination unit / base & purpose of Temporary Duty' : 'e.g. Annual leave with prefix / suffix';
+      }
+    }
+
+    if (leaveTypeSelect) {
+      leaveTypeSelect.addEventListener('change', syncLeaveTypeUI);
     }
 
     btnOpenAddLeave.addEventListener('click', () => {
@@ -1571,29 +1650,34 @@
         leaveOfficerSelect.innerHTML += `<option value="${o.id}">${escapeHtml(o.rank)} ${escapeHtml(o.name)} (${escapeHtml(o.service_id)})</option>`;
       });
       formAddLeave.reset();
+      if (leaveTypeSelect) leaveTypeSelect.value = 'LEAVE';
+      syncLeaveTypeUI();
       openModal(modalAddLeave);
     });
 
     formAddLeave.addEventListener('submit', (e) => {
       e.preventDefault();
+      const type = leaveTypeSelect ? leaveTypeSelect.value : 'LEAVE';
+      const isTyDuty = type === 'TY_DUTY';
       const officerId = parseInt(leaveOfficerSelect.value, 10);
       const leaveStart = document.getElementById('leaveStart').value;
       const leaveEnd = document.getElementById('leaveEnd').value;
-      const prefixStart = document.getElementById('prefixStart').value || null;
-      const prefixEnd = document.getElementById('prefixEnd').value || null;
-      const suffixStart = document.getElementById('suffixStart').value || null;
-      const suffixEnd = document.getElementById('suffixEnd').value || null;
+      const prefixStart = (!isTyDuty && document.getElementById('prefixStart')) ? (document.getElementById('prefixStart').value || null) : null;
+      const prefixEnd = (!isTyDuty && document.getElementById('prefixEnd')) ? (document.getElementById('prefixEnd').value || null) : null;
+      const suffixStart = (!isTyDuty && document.getElementById('suffixStart')) ? (document.getElementById('suffixStart').value || null) : null;
+      const suffixEnd = (!isTyDuty && document.getElementById('suffixEnd')) ? (document.getElementById('suffixEnd').value || null) : null;
       const returnDate = document.getElementById('leaveReturnDate').value;
       const remarks = document.getElementById('leaveRemarks').value;
 
       if (leaveEnd < leaveStart) {
-        alert('Leave End Date cannot be before Leave Start Date.');
+        alert(`${isTyDuty ? 'TDY Completion' : 'Leave End'} Date cannot be before Start Date.`);
         return;
       }
 
       const newId = db.leaves.reduce((max, l) => Math.max(max, l.id), 0) + 1;
       db.leaves.push({
         id: newId,
+        type: type,
         officer_id: officerId,
         leave_start: leaveStart,
         leave_end: leaveEnd,
@@ -1607,7 +1691,7 @@
 
       StorageEngine.save(db);
       closeModal(modalAddLeave);
-      showToast('Leave recorded successfully.', 'success');
+      showToast(`${isTyDuty ? 'Temporary Duty (Ty Duty)' : 'Leave'} recorded successfully.`, 'success');
       renderLeavesTable();
       renderRosterView();
     });
