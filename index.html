@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automated Duty Roster Management System</title>
+  <meta name="description" content="Automated officer duty roster generator with independent Normal and Sunday routines, fair distribution, leave management, and duty swaps.">
+  <link rel="stylesheet" href="style.css?v=2.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Standalone SheetJS for client-side Excel import and export on GitHub Pages -->
+  <script src="xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Top Application Header -->
+  <header>
+    <div class="header-container">
+      <div class="logo-group">
+        <div class="naval-crest">⚓</div>
+        <div class="logo-text">
+          <h1>Automated Duty Roster Management</h1>
+          <p>Naval Station Officer Allocation System</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnThemeToggle" class="theme-toggle-btn" title="Toggle Light / Dark Theme" aria-label="Toggle Theme">
+          <span id="themeToggleIcon">🌙</span>
+        </button>
+        <div id="authStatusIndicator" style="display: none;" class="badge badge-return">
+          <span>Watchkeeper Active</span>
+        </div>
+        <button id="btnWatchkeeperPortal" class="btn btn-secondary">
+          <span id="watchkeeperBtnIcon">🔒</span>
+          <span id="watchkeeperBtnText">Watchkeeper Login</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-wrapper">
+
+    <!-- Hero Roster Navigation & Control Card -->
+    <section class="roster-header-card" aria-label="Roster Header and Navigation">
+      <div class="roster-title-area">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <h2 id="rosterWeekTitle">Duty Roster: Week</h2>
+          <span id="rosterStatusBadge" class="badge badge-draft">Draft</span>
+        </div>
+        <p class="roster-subtitle" id="rosterSubtitle">
+          Normal Routine (Mon-Fri) &bull; Sunday Routine (Sat-Sun &amp; Declared Holidays)
+        </p>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <!-- Week Navigation Controls -->
+        <div class="week-navigation">
+          <button id="btnPrevWeek" class="btn btn-secondary btn-sm" title="Previous Week">&larr; Prev</button>
+          <div id="currentWeekRange" class="current-week-display">Loading week...</div>
+          <button id="btnNextWeek" class="btn btn-secondary btn-sm" title="Next Week">Next &rarr;</button>
+        </div>
+
+        <button id="btnCurrentWeek" class="btn btn-secondary btn-sm">Current Week</button>
+        <button id="btnExportExcel" class="btn btn-secondary btn-sm" title="Export this roster to Excel">
+          📥 Export Excel
+        </button>
+      </div>
+    </section>
+
+    <!-- Validation & Conflict Alerts Notice (if any) -->
+    <div id="rosterConflictBanner" style="display: none;" class="conflict-card">
+      <!-- Injected via JavaScript -->
+    </div>
+
+    <!-- Public Duty Roster Main View -->
+    <section class="roster-container" aria-label="Current Week Duty Roster">
+      <div class="table-responsive">
+        <table class="roster-table" id="rosterTable">
+          <thead>
+            <tr>
+              <th class="day-badge-col">Date &amp; Day</th>
+              <th class="routine-col">Routine</th>
+              <th class="officer-col">Assigned Officer</th>
+              <th class="status-col">Special Details / Swap</th>
+              <th class="action-col" id="thActions" style="display: none;">Watchkeeper Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rosterTableBody">
+            <!-- Roster rows dynamically populated -->
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                Loading roster assignments...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Weekly Distribution Summary Bar -->
+      <div class="roster-summary-bar">
+        <div class="summary-stats">
+          <div>Normal Routine Duties: <strong id="statNormalCount">0</strong></div>
+          <div>Sunday Routine Duties: <strong id="statSundayCount">0</strong></div>
+          <div>Declared Holidays: <strong id="statHolidayCount">0</strong></div>
+        </div>
+        <div id="finalizedTimestamp" style="font-size: 0.8rem; color: var(--text-muted);">
+          Status: Unfinalized Draft
+        </div>
+      </div>
+    </section>
+
+    <!-- Watchkeeper Dedicated Workspace (Visible when logged in) -->
+    <section id="watchkeeperPanel" class="watchkeeper-panel" style="display: none;">
+      <div class="panel-header">
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+            <span>🛡️</span> Watchkeeper Management Workspace
+          </h2>
+          <p style="font-size: 0.8rem; color: var(--text-secondary);">
+            Authorized roster adjustments, leave management, duty swaps, transfers, and finalization.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button id="btnValidateRoster" class="btn btn-secondary btn-sm">
+            🔍 Check Conflicts
+          </button>
+          <button id="btnRecalculateRoster" class="btn btn-warning btn-sm" title="Recalculate draft while preserving manual overrides">
+            ⚡ Recalculate Draft
+          </button>
+          <button id="btnFinalizeRoster" class="btn btn-success btn-sm">
+            ✅ Finalize &amp; Lock Roster
+          </button>
+        </div>
+      </div>
+
+      <!-- Workspace Tabs Navigation -->
+      <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="tab-roster-ops">Roster Operations</button>
+        <button class="tab-btn" data-tab="tab-officers">Officer Pool &amp; Counts</button>
+        <button class="tab-btn" data-tab="tab-leaves">Leave Management</button>
+        <button class="tab-btn" data-tab="tab-holidays">Declared Holidays</button>
+        <button class="tab-btn" data-tab="tab-excel">Excel Import &amp; Export</button>
+        <button class="tab-btn" data-tab="tab-history">Duty History &amp; Swaps</button>
+        <button class="tab-btn" data-tab="tab-settings">Security &amp; Reset</button>
+      </div>
+
+      <!-- Tab 1: Roster Operations -->
+      <div id="tab-roster-ops" class="tab-content active">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <h3 style="font-size: 1rem; color: #fff;">Quick Actions for Selected Week</h3>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button id="btnOpenSwapModal" class="btn btn-primary btn-sm">
+              ⇄ Initiate Duty Swap
+            </button>
+            <button id="btnForceRegenerate" class="btn btn-secondary btn-sm" style="color: #f87171;" title="Wipe draft overrides and regenerate cleanly">
+              ↻ Reset &amp; Regenerate All
+            </button>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          You can edit individual duty dates directly using the <strong>Reassign / Disciplinary</strong> buttons in the table above, or swap assignments between any two dates below. All operations strictly enforce the minimum 2-day consecutive rest rule across routines.
+        </p>
+      </div>
+
+      <!-- Tab 2: Officer Pool & Duty Counts -->
+      <div id="tab-officers" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 style="font-size: 1rem; color: #fff;">Officer Roster &amp; Historical Duty Counts</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">
+              Normal and Sunday counts are tracked independently. Incoming joiners and outgoing transfers retain full history.
+            </p>
+          </div>
+          <button id="btnOpenAddOfficer" class="btn btn-primary btn-sm">
+            + Add New Officer
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="roster-table" id="officersTable">
+            <thead>
+              <tr>
+                <th>Service ID</th>
+                <th>Name &amp; Rank</th>
+                <th>Status</th>
+                <th>Joining Date</th>
+                <th>Transfer Date</th>
+                <th>Normal Routine</th>
+                <th>Sunday Routine</th>
+                <th>Total Duties</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="officersTableBody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 3: Leave Management -->
+      <div id="tab-leaves" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 style="font-size: 1rem; color: #fff;">Leave, Prefix &amp; Suffix Records</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">
+              Officers are excluded during leave, prefix, and suffix dates. Returning officers receive priority on their return date when eligible.
+            </p>
+          </div>
+          <button id="btnOpenAddLeave" class="btn btn-primary btn-sm">
+            + Record Officer Leave
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="roster-table" id="leavesTable">
+            <thead>
+              <tr>
+                <th>Officer</th>
+                <th>Leave Period</th>
+                <th>Prefix Holidays</th>
+                <th>Suffix Holidays</th>
+                <th>Return to Duty Date</th>
+                <th>Remarks</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="leavesTableBody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 4: Declared Holidays -->
+      <div id="tab-holidays" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 style="font-size: 1rem; color: #fff;">Declared Holidays Calendar</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">
+              All declared holidays are automatically classified into the Sunday Routine cycle.
+            </p>
+          </div>
+          <button id="btnOpenAddHoliday" class="btn btn-primary btn-sm">
+            + Add Declared Holiday
+          </button>
+        </div>
+
+        <div class="table-responsive" style="max-width: 650px;">
+          <table class="roster-table" id="holidaysTable">
+            <thead>
+              <tr>
+                <th>Holiday Date</th>
+                <th>Description</th>
+                <th>Routine Classification</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="holidaysTableBody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 5: Excel Import & Export -->
+      <div id="tab-excel" class="tab-content">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+          <!-- Import Card -->
+          <div style="background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+            <h3 style="font-size: 1rem; color: #fff; margin-bottom: 0.5rem;">Import Officer Data &amp; History</h3>
+            <p style="font-size: 0.825rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+              Upload an Excel workbook (.xlsx). Existing officers are matched by unique Service ID; duty counts are <strong>never reset</strong> or diminished.
+            </p>
+            <div class="drop-zone" id="excelDropZone">
+              <div class="drop-icon">📊</div>
+              <p style="font-weight: 600; color: #fff;">Click to select or drag &amp; drop Excel file</p>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Supports .xlsx files</p>
+              <input type="file" id="excelFileInput" accept=".xlsx" style="display: none;">
+            </div>
+            <div id="importResultBox" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
+          </div>
+
+          <!-- Template & Export Card -->
+          <div style="background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1rem; color: #fff; margin-bottom: 0.5rem;">Excel Templates &amp; Reports</h3>
+              <p style="font-size: 0.825rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                Download the standardized military duty roster Excel template containing pre-formatted sheets for Officers, Leaves, Holidays, and Historical Duties.
+              </p>
+              <ul style="font-size: 0.8rem; color: var(--text-muted); margin-left: 1.25rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                <li>Officers sheet with Service IDs and independent routine counts</li>
+                <li>Leaves sheet with prefix, suffix, and return dates</li>
+                <li>Declared Holidays sheet for Sunday Routine inclusion</li>
+                <li>Duty History sheet for preserving past roster cycles</li>
+              </ul>
+            </div>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+              <button id="btnDownloadTemplate" class="btn btn-secondary btn-sm">
+                📥 Download Template (.xlsx)
+              </button>
+              <button id="btnExportFullExcel" class="btn btn-primary btn-sm">
+                📊 Export Full System Data
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 6: Duty History & Swaps Log -->
+      <div id="tab-history" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <div>
+            <h3 style="font-size: 1rem; color: #fff;">Historical Rosters &amp; Duty Swap Audit Trail</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">
+              All finalized duties and mutual exchanges are permanently logged and used for continuous rotation.
+            </p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+          <div>
+            <h4 style="font-size: 0.9rem; color: var(--cyan-accent); margin-bottom: 0.5rem;">Duty Swaps Audit Log</h4>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+              <table class="roster-table" id="swapsLogTable">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Actual Officer</th>
+                    <th>Swapped With</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="swapsLogTableBody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="font-size: 0.9rem; color: var(--navy-light); margin-bottom: 0.5rem;">Past Finalized Duties History</h4>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+              <table class="roster-table" id="historyLogTable">
+                <thead>
+                  <tr>
+                    <th>Duty Date</th>
+                    <th>Assigned Officer</th>
+                    <th>Routine</th>
+                    <th>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody id="historyLogTableBody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 7: Security & Settings -->
+      <div id="tab-settings" class="tab-content">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+          <div style="background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+            <h3 style="font-size: 1rem; color: #fff; margin-bottom: 0.5rem;">Change Watchkeeper Password</h3>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+              Initial default password is <code>admin@123</code>.
+            </p>
+
+            <form id="formChangePassword">
+              <div class="form-group" style="margin-bottom: 0.85rem;">
+                <label for="currentPassword">Current Password</label>
+                <input type="password" id="currentPassword" class="form-control" required>
+              </div>
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" class="form-control" required minlength="6">
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <button type="submit" class="btn btn-primary btn-sm">Update Password</button>
+                <button type="button" id="btnLogoutWatchkeeper" class="btn btn-secondary btn-sm" style="color: #f87171;">
+                  Logout
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div style="background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1rem; color: #fff; margin-bottom: 0.5rem;">Reset System Sample Data</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                Reset all officers, leaves, declared holidays, and duty rosters back to the initial military station sample dataset.
+              </p>
+            </div>
+            <button id="btnResetSampleData" class="btn btn-secondary btn-sm" style="color: #f87171; align-self: flex-start;">
+              ⚠️ Reset to Factory Sample Data
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- MODALS -->
+  <!-- ======================================================== -->
+
+  <!-- 1. Watchkeeper Login Modal -->
+  <div class="modal-overlay" id="modalLogin">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Watchkeeper Authentication</h3>
+        <button class="modal-close" data-close="modalLogin">&times;</button>
+      </div>
+      <form id="formLogin">
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Please enter the Watchkeeper authorization password to access administrative controls, duty swaps, and finalization.
+          </p>
+          <div class="form-group">
+            <label for="loginPassword">Watchkeeper Password</label>
+            <input type="password" id="loginPassword" class="form-control" placeholder="Enter password (initial: admin@123)" required autofocus>
+          </div>
+          <div id="loginErrorMsg" style="color: #f87171; font-size: 0.8rem; margin-top: 0.5rem; display: none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalLogin">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Login to Watchkeeper</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Edit Assignment / Punishment Modal -->
+  <div class="modal-overlay" id="modalEditAssignment">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="editModalTitle">Edit Duty Assignment</h3>
+        <button class="modal-close" data-close="modalEditAssignment">&times;</button>
+      </div>
+      <form id="formEditAssignment">
+        <input type="hidden" id="editAssignmentId">
+        <div class="modal-body">
+          <div style="background: var(--bg-card); padding: 0.75rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Date &amp; Routine</div>
+            <div id="editDateDisplay" style="font-size: 1rem; font-weight: 700; color: #fff;"></div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="selectEditOfficer">Assigned Officer</label>
+            <select id="selectEditOfficer" class="form-control" required>
+              <!-- Populated via JS -->
+            </select>
+          </div>
+
+          <!-- Punishment Duty Checkbox & Reason (Rule 2) -->
+          <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm); padding: 0.85rem; margin-bottom: 1rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: #fca5a5; font-weight: 600; font-size: 0.85rem;">
+              <input type="checkbox" id="checkIsPunishment">
+              <span>Mark as Disciplinary / Punishment Duty (Bypasses rest restrictions)</span>
+            </label>
+            <div id="punishmentReasonGroup" style="margin-top: 0.5rem; display: none;">
+              <label for="punishmentReasonInput" style="font-size: 0.75rem; color: var(--text-secondary);">Recorded Disciplinary Reason</label>
+              <input type="text" id="punishmentReasonInput" class="form-control" placeholder="Specify reason (e.g. Conduct infraction)">
+            </div>
+          </div>
+
+          <div id="assignmentEligibilityFeedback" style="font-size: 0.8rem; display: none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalEditAssignment">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save Assignment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Duty Swap Modal (Rule 8) -->
+  <div class="modal-overlay" id="modalSwap">
+    <div class="modal-dialog" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3>Mutual Duty Swap (Section 8)</h3>
+        <button class="modal-close" data-close="modalSwap">&times;</button>
+      </div>
+      <form id="formSwap">
+        <div class="modal-body">
+          <p style="font-size: 0.825rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Exchange duty slots between two dates. The roster will display <code>Actual Officer (swapped with Original Officer)</code> and validate that neither officer violates the consecutive-duty restrictions.
+          </p>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="selectSwapSlot1">First Duty Date &amp; Officer</label>
+              <select id="selectSwapSlot1" class="form-control" required></select>
+            </div>
+            <div class="form-group">
+              <label for="selectSwapSlot2">Second Duty Date &amp; Officer</label>
+              <select id="selectSwapSlot2" class="form-control" required></select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="swapReasonInput">Swap Reason / Remarks</label>
+            <input type="text" id="swapReasonInput" class="form-control" placeholder="Mutual agreement / Watchkeeper approved" value="Mutual exchange">
+          </div>
+
+          <div id="swapValidationFeedback" class="conflict-card" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalSwap">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Confirm &amp; Record Swap</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Add Officer Modal -->
+  <div class="modal-overlay" id="modalAddOfficer">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Add Officer (Incoming Transfer / Joiner)</h3>
+        <button class="modal-close" data-close="modalAddOfficer">&times;</button>
+      </div>
+      <form id="formAddOfficer">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="newServiceId">Service ID / Unique Identifier</label>
+              <input type="text" id="newServiceId" class="form-control" placeholder="e.g. IC-110" required>
+            </div>
+            <div class="form-group">
+              <label for="newName">Full Name</label>
+              <input type="text" id="newName" class="form-control" placeholder="e.g. Rahul Kapoor" required>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="newRank">Rank</label>
+              <select id="newRank" class="form-control">
+                <option value="Sub Lt">Sub Lt</option>
+                <option value="Lt" selected>Lt</option>
+                <option value="Lt Cdr">Lt Cdr</option>
+                <option value="Cdr">Cdr</option>
+                <option value="Capt">Capt</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="newJoiningDate">Effective Joining Date</label>
+              <input type="date" id="newJoiningDate" class="form-control" required>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="newNormalCount">Historical Normal Duties</label>
+              <input type="number" id="newNormalCount" class="form-control" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label for="newSundayCount">Historical Sunday Duties</label>
+              <input type="number" id="newSundayCount" class="form-control" value="0" min="0">
+            </div>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-muted);">
+            Note: As per Section 6 Rule 1, new joiners will not be repeatedly assigned simply because their historical count is low; they will enter the regular rotation cycle.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalAddOfficer">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Add Officer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. Record Outgoing Transfer Modal -->
+  <div class="modal-overlay" id="modalTransferOut">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Record Outgoing Transfer</h3>
+        <button class="modal-close" data-close="modalTransferOut">&times;</button>
+      </div>
+      <form id="formTransferOut">
+        <input type="hidden" id="transferOfficerId">
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Mark officer as transferred out. The officer will be excluded from duty allocations after the effective date, while all historical duty records and statistics are fully preserved.
+          </p>
+          <div style="background: var(--bg-card); padding: 0.75rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Officer to Transfer</div>
+            <div id="transferOfficerName" style="font-size: 1rem; font-weight: 700; color: #fff;"></div>
+          </div>
+          <div class="form-group">
+            <label for="transferDateInput">Effective Transfer Date</label>
+            <input type="date" id="transferDateInput" class="form-control" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalTransferOut">Cancel</button>
+          <button type="submit" class="btn btn-danger btn-sm">Confirm Outgoing Transfer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. Add Leave Modal -->
+  <div class="modal-overlay" id="modalAddLeave">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>Record Leave, Prefix &amp; Suffix Details</h3>
+        <button class="modal-close" data-close="modalAddLeave">&times;</button>
+      </div>
+      <form id="formAddLeave">
+        <div class="modal-body">
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="leaveOfficerSelect">Officer</label>
+            <select id="leaveOfficerSelect" class="form-control" required></select>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="leaveStart">Leave Start Date</label>
+              <input type="date" id="leaveStart" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label for="leaveEnd">Leave End Date</label>
+              <input type="date" id="leaveEnd" class="form-control" required>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="prefixStart">Prefix Holidays Start (Optional)</label>
+              <input type="date" id="prefixStart" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="prefixEnd">Prefix Holidays End (Optional)</label>
+              <input type="date" id="prefixEnd" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="suffixStart">Suffix Holidays Start (Optional)</label>
+              <input type="date" id="suffixStart" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="suffixEnd">Suffix Holidays End (Optional)</label>
+              <input type="date" id="suffixEnd" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="leaveReturnDate">Actual Return-to-Duty Date</label>
+            <input type="date" id="leaveReturnDate" class="form-control" required>
+            <p style="font-size: 0.75rem; color: var(--cyan-accent); margin-top: 0.25rem;">
+              Officer is prioritized for duty on this return date when feasible and rest restrictions permit.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label for="leaveRemarks">Remarks</label>
+            <input type="text" id="leaveRemarks" class="form-control" placeholder="e.g. Annual leave with weekend suffix">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalAddLeave">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save Leave Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7. Add Declared Holiday Modal -->
+  <div class="modal-overlay" id="modalAddHoliday">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Add Declared Holiday (Sunday Routine)</h3>
+        <button class="modal-close" data-close="modalAddHoliday">&times;</button>
+      </div>
+      <form id="formAddHoliday">
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Declared holidays are classified into the Sunday Routine cycle and maintain separate Sunday Routine counts and sequences.
+          </p>
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="holidayDate">Holiday Date</label>
+            <input type="date" id="holidayDate" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="holidayDesc">Holiday Name / Description</label>
+            <input type="text" id="holidayDesc" class="form-control" placeholder="e.g. Republic Day" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="modalAddHoliday">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Add Holiday</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Message Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js?v=2.0"></script>
+</body>
+</html>
