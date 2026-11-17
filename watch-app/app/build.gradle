@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.xaviourzone.powerface'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.xaviourzone.powerface'
+        minSdk 21
+        // Target 28 on purpose: on Android 10 this still lets the app switch
+        // Wi-Fi and Bluetooth off while power mode runs (newer targets block it).
+        // The app is sideloaded, never published to Play Store, so this is fine.
+        targetSdk 28
+        // CI passes the build number so every APK installs over the previous one.
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName "1.0.${System.getenv('GITHUB_RUN_NUMBER') ?: '0'}"
+    }
+
+    signingConfigs {
+        // Fixed key kept in the repo so each new APK updates the old one in place.
+        // Throwaway debug key: fine for personal sideloading only.
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

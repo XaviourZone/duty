@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Round background -->
+    <path
+        android:fillColor="#FF2B1B6B"
+        android:pathData="M54,4a50,50 0 1,0 0.1,0z" />
+    <!-- Watch body (rounded square) -->
+    <path
+        android:fillColor="#FF0B0B12"
+        android:strokeColor="#FF8E7BFF"
+        android:strokeWidth="3"
+        android:pathData="M38,28h32a10,10 0 0 1 10,10v32a10,10 0 0 1 -10,10h-32a10,10 0 0 1 -10,-10v-32a10,10 0 0 1 10,-10z" />
+    <!-- Lightning bolt = power saving -->
+    <path
+        android:fillColor="#FF4FC3F7"
+        android:pathData="M58,34 L44,57 L53,57 L49,74 L64,49 L55,49 Z" />
+</vector>
