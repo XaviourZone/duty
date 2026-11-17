@@ -38,6 +38,7 @@ public class SettingsActivity extends Activity {
         toggle(card, FaceStore.K_PIN, "Lock to the face (screen pinning)", false);
         toggle(card, FaceStore.K_KEEP_ON, "Keep screen always on", true);
         toggle(card, FaceStore.K_TAP_WAKE, "Tap to brighten for 5 seconds", true);
+        toggle(card, FaceStore.K_SWIPE, "Swipe to change face in power mode", true);
         toggle(card, FaceStore.K_FAHRENHEIT, "Temperature in °F", false);
 
         // Brightness used while the face is shown
@@ -81,7 +82,7 @@ public class SettingsActivity extends Activity {
         card.addView(goal, fullWidth());
 
         TextView help = Ui.text(this,
-                "In power mode: long-press the face to exit.\n"
+                "In power mode: long-press the face to exit, swipe left/right to change face (favourites and your own faces).\n"
                         + "Tip: dark faces with few bright pixels use the least battery on the AMOLED screen.",
                 12, Ui.GREY, false);
         help.setPadding(Ui.dp(this, 4), Ui.dp(this, 14), Ui.dp(this, 4), 0);

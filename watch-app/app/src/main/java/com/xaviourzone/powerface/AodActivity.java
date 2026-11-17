@@ -19,7 +19,10 @@ import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.WindowManager;
+
+import java.util.List;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 /**
@@ -41,6 +44,7 @@ public class AodActivity extends Activity implements SensorEventListener {
     private volatile boolean turnedWifiOff, turnedBtOff;
     private boolean pinned, restored, receiving;
     private int shiftStep;
+    private TextView overlay;
 
     private final Runnable dimAgain = () -> setBrightness(baseBrightness());
 
@@ -77,21 +81,41 @@ public class AodActivity extends Activity implements SensorEventListener {
         PowerUtils.fillPreview(this, fv);
         root.addView(fv, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER));
+        overlay = Ui.text(this, "\u26A1 Power mode on\nLong-press to exit", 13, 0xFFFFFFFF, false);
+        overlay.setGravity(Gravity.CENTER);
+        overlay.setBackground(Ui.glass(this, 18));
+        ((android.graphics.drawable.GradientDrawable) overlay.getBackground()).setColor(0xCC101018);
+        int pad = Ui.dp(this, 12);
+        overlay.setPadding(pad, pad, pad, pad);
+        FrameLayout.LayoutParams olp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+        olp.bottomMargin = Ui.dp(this, 24);
+        root.addView(overlay, olp);
         setContentView(root);
 
         setBrightness(baseBrightness());
+        PowerUtils.sessionStart(this, PowerUtils.batteryNow(this));
 
         gestures = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onDown(MotionEvent e) { return true; }
             @Override public boolean onSingleTapUp(MotionEvent e) { boost(); return true; }
             @Override public void onLongPress(MotionEvent e) { confirmExit(); }
+            @Override public boolean onFling(MotionEvent a, MotionEvent b, float vx, float vy) {
+                if (a == null || b == null) return false;
+                if (Math.abs(vx) > Math.abs(vy) && Math.abs(vx) > 500
+                        && sp.getBoolean(FaceStore.K_SWIPE, true)) {
+                    switchFace(vx < 0 ? 1 : -1);
+                    return true;
+                }
+                return false;
+            }
         });
 
         sensors = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensors != null) stepSensor = sensors.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
 
         startPowerSaving();
-        Toast.makeText(this, "Power mode on. Long-press to exit.", Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -169,9 +193,17 @@ public class AodActivity extends Activity implements SensorEventListener {
             // Grab fresh weather first, while the network is still on.
             final float t = PowerUtils.updateWeather(app, false);
             handler.post(() -> { fv.temp = t; fv.invalidate(); });
-            if (kill) PowerUtils.killBackground(app);
+            int closed = kill ? PowerUtils.killBackground(app) : -1;
             if (wifi) turnedWifiOff = PowerUtils.wifiOff(app);
             if (bt) turnedBtOff = PowerUtils.bluetoothOff();
+            final StringBuilder r = new StringBuilder("\u26A1 Power mode on\n");
+            if (closed >= 0) r.append("\u2713 Background apps closed (").append(closed).append(" apps)\n");
+            if (wifi) r.append(turnedWifiOff ? "\u2713 Wi-Fi off\n" : "\u2022 Wi-Fi was already off\n");
+            if (bt) r.append(turnedBtOff ? "\u2713 Bluetooth off\n" : "\u2022 Bluetooth was already off\n");
+            r.append("\u2713 Brightness ").append(Math.round(baseBrightness() * 100)).append("% \u2022 redraw once a minute\n");
+            if (pinned) r.append("\u2713 Locked to this face\n");
+            r.append("Swipe \u2194 to change face \u2022 long-press to exit");
+            handler.post(() -> showOverlay(r.toString(), 7000));
         }).start();
     }
 
@@ -179,6 +211,7 @@ public class AodActivity extends Activity implements SensorEventListener {
         if (restored) return;
         restored = true;
         final Context app = getApplicationContext();
+        PowerUtils.sessionEnd(app, PowerUtils.batteryNow(app));
         if (turnedWifiOff) PowerUtils.wifiOn(app);
         if (turnedBtOff) PowerUtils.bluetoothOn();
         if (pinned && Build.VERSION.SDK_INT >= 21) {
@@ -197,6 +230,29 @@ public class AodActivity extends Activity implements SensorEventListener {
                 .setNegativeButton("Stay", (d, w) -> setBrightness(baseBrightness()))
                 .setOnCancelListener(d -> setBrightness(baseBrightness()))
                 .show();
+    }
+
+    private final Runnable hideOverlay = () -> overlay.setVisibility(android.view.View.GONE);
+
+    private void showOverlay(String text, long ms) {
+        overlay.setText(text);
+        overlay.setVisibility(android.view.View.VISIBLE);
+        handler.removeCallbacks(hideOverlay);
+        handler.postDelayed(hideOverlay, ms);
+    }
+
+    /** Swipe left / right: next or previous face (favourites + your own, or all). */
+    private void switchFace(int dir) {
+        List<Face> list = FaceStore.swipeList(this);
+        if (list.isEmpty()) return;
+        String cur = fv.getFace() == null ? null : fv.getFace().id;
+        int i = 0;
+        for (int k = 0; k < list.size(); k++) if (list.get(k).id.equals(cur)) i = k;
+        Face next = list.get(((i + dir) % list.size() + list.size()) % list.size());
+        FaceStore.setCurrent(this, next.id);
+        fv.setFace(next);
+        boost();
+        showOverlay(next.name, 1500);
     }
 
     // ----- screen -----

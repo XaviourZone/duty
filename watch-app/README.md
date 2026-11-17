@@ -13,7 +13,13 @@ Open the app → **Apply**, **Customize faces**, **Create new face**, **Power se
 - **Create new**: the editor. Add Time, Date, Battery, Temp, Steps, Analog dial or your own text,
   drag items, change size, colour, gradient and font, show Battery / Steps as a ring, and use a gallery
   photo as the background (with a Darker setting to save battery).
-- 5 built-in faces: Neon Glass, Minimal, Analog Classic, Sport, Info Stack. You can add as many as you like.
+- **100 built-in designs**: 10 layouts (Giant, Orbit, Rings, Dashboard, Minimal, Split, Neon Frame, Sport,
+  Analog Pro, Grid) × 10 glowing themes (Cyber, Aurora, Sunset, Ice, Lava, Matrix, Royal, Sakura, Ocean, Mono),
+  all laid out for the square screen. Gallery with filters and favourites; Customize any design to make your own copy.
+- **Editor (v2)**: Add · Layers · Style · Background tabs. Tap an item to select it, drag to move (snaps to centre),
+  pinch to resize, Undo. Layers list with ▲ ▼ ✕ to reorder and delete. Style: colour, gradient, glow, opacity,
+  9 fonts, italic, outline, CAPS, letter spacing, date formats, ring/bar/arc meters, dial styles, shapes
+  (circle, ring, glass box, frame, line, arc). New faces start empty.
 
 ### Power mode
 - Closes background processes of other apps.
@@ -22,6 +28,9 @@ Open the app → **Apply**, **Customize faces**, **Create new face**, **Power se
 - Low brightness (adjustable), tap to brighten for 5 s.
 - Redraws only once a minute; the step sensor batches its updates.
 - Moves the face a few pixels each minute to protect the AMOLED from burn-in.
+- Swipe left/right to change face (favourites and your own faces).
+- Shows what it did when it starts (apps closed, Wi-Fi/Bluetooth off, brightness), and the main screen shows
+  how much battery the last power-mode session used per hour.
 - **Long-press anywhere to exit.**
 
 Temperature comes from Open-Meteo (free, no key) for your last known location, refreshed at most once an hour.

@@ -17,6 +17,7 @@ public class MainActivity extends Activity {
 
     private FaceView preview;
     private TextView faceName;
+    private TextView report;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -52,8 +53,16 @@ public class MainActivity extends Activity {
         apply.setOnClickListener(v -> startActivity(new Intent(this, AodActivity.class)));
         col.addView(apply);
 
-        Button customize = Ui.button(this, "Customize faces", false);
-        customize.setOnClickListener(v -> startActivity(new Intent(this, FacesActivity.class)));
+        Button gallery = Ui.button(this, "Faces gallery (100+)", false);
+        gallery.setOnClickListener(v -> startActivity(new Intent(this, FacesActivity.class)));
+        col.addView(gallery);
+
+        Button customize = Ui.button(this, "Customize this face", false);
+        customize.setOnClickListener(v -> {
+            Intent i = new Intent(this, EditorActivity.class);
+            i.putExtra("id", FaceStore.current(this).id);
+            startActivity(i);
+        });
         col.addView(customize);
 
         Button create = Ui.button(this, "+  Create new face", false);
@@ -63,6 +72,12 @@ public class MainActivity extends Activity {
         Button settings = Ui.button(this, "Power settings", false);
         settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         col.addView(settings);
+
+        report = Ui.text(this, "", 12, Ui.GREY, false);
+        report.setGravity(Gravity.CENTER);
+        report.setPadding(Ui.dp(this, 6), Ui.dp(this, 14), Ui.dp(this, 6), 0);
+        col.addView(report, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         setContentView(scroll);
         askPermissionsOnce();
@@ -76,6 +91,7 @@ public class MainActivity extends Activity {
         PowerUtils.fillPreview(this, preview);
         preview.invalidate();
         faceName.setText(f.name);
+        report.setText(PowerUtils.lastSessionReport(this));
         // Refresh temperature in the background if it is older than an hour.
         new Thread(() -> {
             final float t = PowerUtils.updateWeather(getApplicationContext(), false);

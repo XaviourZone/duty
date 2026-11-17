@@ -44,6 +44,14 @@ final class PowerUtils {
                 || status == BatteryManager.BATTERY_STATUS_FULL;
     }
 
+    static int batteryNow(Context c) {
+        Intent i = c.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (i == null) return -1;
+        int level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+        return level >= 0 && scale > 0 ? Math.round(level * 100f / scale) : -1;
+    }
+
     /** Fills a preview with the latest known values (no sensors started). */
     static void fillPreview(Context c, FaceView fv) {
         applyBattery(fv, c.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED)));
@@ -80,6 +88,40 @@ final class PowerUtils {
         return (int) steps;
     }
 
+    // ----- power-mode session stats (proof that it saves battery) -----
+
+    static void sessionStart(Context c, int battery) {
+        FaceStore.prefs(c).edit()
+                .putLong("sesStart", System.currentTimeMillis())
+                .putInt("sesStartBat", battery)
+                .putLong("sesEnd", 0)
+                .apply();
+    }
+
+    static void sessionEnd(Context c, int battery) {
+        SharedPreferences sp = FaceStore.prefs(c);
+        if (sp.getLong("sesStart", 0) == 0) return;
+        sp.edit().putLong("sesEnd", System.currentTimeMillis()).putInt("sesEndBat", battery).apply();
+    }
+
+    /** e.g. "Last power mode: 2 h 10 min, used 5% battery (2.3% per hour)". */
+    static String lastSessionReport(Context c) {
+        SharedPreferences sp = FaceStore.prefs(c);
+        long start = sp.getLong("sesStart", 0), end = sp.getLong("sesEnd", 0);
+        if (start == 0 || end == 0 || end <= start) return "";
+        long mins = (end - start) / 60000L;
+        int used = sp.getInt("sesStartBat", 0) - sp.getInt("sesEndBat", 0);
+        String dur = mins >= 60 ? (mins / 60) + " h " + (mins % 60) + " min" : mins + " min";
+        StringBuilder s = new StringBuilder("Last power mode: ").append(dur);
+        if (used >= 0) {
+            s.append(", used ").append(used).append("% battery");
+            if (mins >= 20) s.append(String.format(Locale.US, " (%.1f%% per hour)", used * 60f / mins));
+        } else {
+            s.append(" (charging)");
+        }
+        return s.toString();
+    }
+
     /** Stops cached background processes of every other app. Run off the main thread. */
     static int killBackground(Context c) {
         ActivityManager am = (ActivityManager) c.getSystemService(Context.ACTIVITY_SERVICE);
@@ -91,7 +133,7 @@ final class PowerUtils {
             if (ai.packageName.equals(c.getPackageName())) continue;
             try {
                 am.killBackgroundProcesses(ai.packageName);
-                n++;
+                if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0) n++;
             } catch (Exception ignored) {
             }
         }
