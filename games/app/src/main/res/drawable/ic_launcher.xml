@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Round background -->
+    <path
+        android:fillColor="#FF16042E"
+        android:pathData="M54,4a50,50 0 1,0 0.1,0z" />
+    <!-- Game pad body -->
+    <path
+        android:fillColor="#FF0B0B12"
+        android:strokeColor="#FFFF2BD6"
+        android:strokeWidth="3"
+        android:pathData="M30,40h48a12,12 0 0 1 12,12v8a12,12 0 0 1 -12,12h-48a12,12 0 0 1 -12,-12v-8a12,12 0 0 1 12,-12z" />
+    <!-- D-pad -->
+    <path
+        android:fillColor="#FF00E5FF"
+        android:pathData="M33,53h5v-5h4v5h5v4h-5v5h-4v-5h-5z" />
+    <!-- Buttons -->
+    <path
+        android:fillColor="#FFFF2BD6"
+        android:pathData="M70,50a3.5,3.5 0 1,0 0.1,0z M78,58a3.5,3.5 0 1,0 0.1,0z" />
+</vector>
